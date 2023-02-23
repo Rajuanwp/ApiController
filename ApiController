@@ -2,14 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\CourseRegistration;
+
 use Illuminate\Http\Request;
 use DB;
 use DOMDocument;
 use App\Models\Blog;
 use App\Models\BlogCategory;
-use App\Models\Contact;
-use App\Models\Billing;
+use App\Models\Contact
 use Validator;
 use Mail;
 use DateTime;
@@ -21,17 +20,7 @@ use App\Models\BlogTagsSave;
 use App\Models\Category;
 use App\Models\EventRegistration;
 use App\Models\Galleries;
-use App\Models\Partner;
-use App\Models\Student;
-use App\Models\Trainer;
-use App\Models\Training;
-use App\Models\Event;
-use App\Models\Workshop;
-use App\Models\Review;
-use App\Models\Album;
-use App\Models\Enroll;  
-use App\Models\Payment;  
-use App\Models\Subscribe;
+
 use App\Models\WorkshopRegistration;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Input;
@@ -112,16 +101,7 @@ class ApiController extends Controller{
             "success" => "Thanks for contacting with PencilBox. We will reach you soon!"
         ]);
     }
-   
- 
-
   
-
-
-    
-   
-
- 
     public function student_info_store(Request $request){
         Validator::extend('national_id', function ($attribute, $value, $parameters, $validator) {
             return strlen((string)$value) == 10 || strlen((string)$value) == 13 || strlen((string)$value) == 17;
