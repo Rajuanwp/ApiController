@@ -269,6 +269,35 @@ class ApiController extends Controller{
             }
         }
     }
+    
+        public function carrerapi(Request $request){
+
+        $format=Carbon::now()->addSeconds(60)->format('Y-m-d H:i:s');
+        $apiuser=DB::table('apiuser')
+        ->where('token',$request->token)
+        ->where('created_at', '>=', $format) 
+        ->get();
+        // return  $format;
+        if(count($apiuser)>0){
+
+            $career = DB::table('careers')->where('publication_status', 1)->get();
+
+            return response()->json([
+
+                "message"=>"Success",
+                "career"=>$career,
+
+            ]);
+
+        }
+        else{
+            return response()->json([
+
+                "error"=>"404",
+                "message"=>"Your Token Invalid ",
+            ]);
+        }
+    }
   
 
 
