@@ -1,0 +1,276 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\CourseRegistration;
+use Illuminate\Http\Request;
+use DB;
+use DOMDocument;
+use App\Models\Blog;
+use App\Models\BlogCategory;
+use App\Models\Contact;
+use App\Models\Billing;
+use Validator;
+use Mail;
+use DateTime;
+use App\Models\Batch;
+use App\Models\BatchTrainer;
+use App\Models\BlogComment;
+use App\Models\BlogTag;
+use App\Models\BlogTagsSave;
+use App\Models\Category;
+use App\Models\EventRegistration;
+use App\Models\Galleries;
+use App\Models\Partner;
+use App\Models\Student;
+use App\Models\Trainer;
+use App\Models\Training;
+use App\Models\Event;
+use App\Models\Workshop;
+use App\Models\Review;
+use App\Models\Album;
+use App\Models\Enroll;  
+use App\Models\Payment;  
+use App\Models\Subscribe;
+use App\Models\WorkshopRegistration;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Input;
+use Session;
+use PDF;
+
+
+class ApiController extends Controller{
+    public function getStudents(){
+        $data = DB::table('student_registrations')->get();
+        return $data;
+    }
+    public function getCourses(){
+        $data = DB::table('trainings')
+                    ->join('batches', 'trainings.id', '=', 'batches.training_id')
+                    ->join('batch_trainers', 'batches.id', '=', 'batch_trainers.batch_id')
+                    ->join('categories', 'trainings.cat_id', '=', 'categories.id')
+                    ->orderBy('trainings.id', 'DESC')
+                    ->get();
+        return $data;
+    }
+    public function getModules(){
+        $data = DB::table('modules')->get();
+        return $data;
+    }
+    public function getTrainers(){
+        $data = DB::table('trainers')->get();
+        return $data;
+    }
+    public function getStudentsReview(){
+        $data = DB::table('reviews')->get();
+        return $data;
+    }
+    
+  
+    public function latestBlog(){
+        $data = Blog::with('user','category','blogtag.blogtags')->orderBy('created_at','DESC')->where('publication_status',1)->get();
+        return $data;
+    }
+    public function blogCats(){
+        $data = BlogCategory::with('blog')->get();
+        return $data;
+    }
+    public function popularBlog(){
+        $data = Blog::with('user','category','blogtag.blogtags')->where('publication_status',1)->inRandomOrder()->limit(8)->get();
+        return $data;
+    }
+    public function blogArchives(){
+        $data = DB::table('blogs')->selectRaw('year(created_at) as year,month(created_at) as month, monthname(created_at) as monthname, COUNT(*) post_count')
+            ->groupBy('year')
+            ->groupBy('monthname')
+            ->groupBy('month')
+            ->orderBy('year', 'desc')
+            ->orderBy('month', 'desc')
+            ->where('publication_status',1)
+            ->get();
+        return $data;
+    }
+    public function hero_counter(){
+        $counter_data['batches'] = DB::table('batches')->count();
+        $counter_data['enrolls'] = DB::table('enrolls')->count();
+        $counter_data['trainers'] = DB::table('trainers')->count();
+        $counter_data['job_placement'] = DB::table('pencilbox_counter')->where('id',1)->value("job_placement");
+        
+        return response()->json([
+            "counter_data" => $counter_data
+        ]);
+    }
+    public function contactReg(Request $request){
+        $contact = new Contact();
+        $contact->first_name = $request->first_name;
+        $contact->last_name = $request->last_name;
+        $contact->phone = $request->phone;
+        $contact->email = $request->email;
+        $contact->message = $request->message;
+        $contact->save();
+        return response()->json([
+            "success" => "Thanks for contacting with PencilBox. We will reach you soon!"
+        ]);
+    }
+   
+ 
+
+  
+
+
+    
+   
+
+ 
+    public function student_info_store(Request $request){
+        Validator::extend('national_id', function ($attribute, $value, $parameters, $validator) {
+            return strlen((string)$value) == 10 || strlen((string)$value) == 13 || strlen((string)$value) == 17;
+        });
+        Validator::extend('birthday', function ($attribute, $value, $parameters) {
+            $minAge = (!empty($parameters)) ? (int) $parameters[0] : 18;
+            return (new DateTime)->diff(new DateTime($value))->y >= $minAge;
+
+        });
+        $validator = Validator::make($request->all(), [
+            'course_name' => 'required',
+            'full_name' => 'required|regex:/^[\pL\s]+$/u|min:3',
+            'email_address_uniq' => 'required|unique:seipregistrations|max:255',
+            'phone' => ['required', 'digits:11', 'unique:seipregistrations', 'regex:/^(?:\\+88|88)?(01[3-9]\\d{8})$/'],
+            'religion' => 'required',
+            'gender' => 'required',
+            'birthday' => 'required|date|birthday',
+            'national_id' => 'required|numeric|unique:seipregistrations|national_id',
+            'employment_status' => 'required',
+            'present_address' => 'required|min:3',
+            'present_city' => 'required|regex:/^[\pL\s]+$/u|min:3',
+            'present_postal_code' => 'required|numeric|digits:4',
+            'present_division' => 'required',
+            'present_per_district' => 'required',
+            'present_sub_district' => 'required',
+            'lavel_of_education' => 'required',
+            'institute_name' => 'required|regex:/^[\pL\s]+$/u|min:2',
+            'subject' => 'required|regex:/^[\pL\s]+$/u|min:2',
+            'passing_year' => 'required|numeric|digits:4',
+            'photo' => 'nullable|mimes:jpeg,png,jpg|max:2048',
+        ], [
+            'national_id' => 'The national id must be between 10 ,13 and 17 digits.',
+            'phone' => 'The phone number must be Bangladeshi number',
+            'birthday' => 'You must be at least 18+ years old',
+        ]);
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => 'faild',
+                "errors" => $validator->messages()
+            ]);
+        } else {
+            if ($request->file('photo')) {
+                $studentImage = $request->file('photo');
+                $imageName = uniqid() . '-' . date('Y-M-D-H-i-s') . '.' . $studentImage->getClientOriginalExtension();
+                $directory = 'assets/img/student-images/';
+                $imageUrl = $directory . $imageName;
+                $studentImage->move($directory, $imageName);
+            } else {
+                $imageUrl = 'NULL';
+            }
+            $seip_student_registration = DB::table('seipregistrations')->insert([
+                'FirstCourse' => $request->course_name,
+                'name' => $request->full_name,
+                'phone' => $request->phone,
+                'email_address_uniq' => $request->email_address_uniq,
+                'religion' => $request->religion,
+                'gender' => $request->gender,
+                'birthday' => $request->birthday,
+                'national_id' => $request->national_id,
+                'employee' => $request->employment_status,
+                'current_institute' => $request->current_institute,
+                'semester' => $request->semester,
+                'marketplace_link' => $request->marketplace_link,
+                'freelancer_monthly_income' => $request->freelancer_monthly_income,
+                'type_of_business' => $request->type_of_business,
+                'businessman_monthly_income' => $request->businessman_monthly_income,
+                'entrepreneur_working_sector' => $request->entrepreneur_working_sector,
+                'entrepreneur_monthly_income' => $request->entrepreneur_monthly_income,
+                'field_of_interest' => $request->field_of_interest,
+                'field_of_interest_alternative' => $request->field_of_interest_alternative,
+                'companyName' => $request->company_name,
+                'designation' => $request->designation,
+                'income' => $request->job_holder_monthly_income,
+                'preAddress' => $request->present_address,
+                'preCity' => $request->present_city,
+                'prePostCode' => $request->present_postal_code,
+                'preDivision' => $request->present_division,
+                'preDistrict' => $request->present_per_district,
+                'preSubDistrict' => $request->present_sub_district,
+                'education' => $request->lavel_of_education,
+                'institute' => $request->institute_name,
+                'subject' => $request->subject,
+                'year' => $request->passing_year,
+                'file' => $imageUrl
+            ]);
+            
+            
+            $student_seip_id = DB::table('seipregistrations')->where('email_address_uniq', '=', $request->email_address_uniq)->value('id');
+            $seip_id = str_pad($student_seip_id, 5, '0', STR_PAD_LEFT);        
+            $data['email'] = $request->email_address_uniq;
+            $data['full_name'] = $request->full_name;
+            $data['seip_id'] = $seip_id;
+            $data['course_name'] = $request->course_name;        
+              
+            $this->sendSMS($request->phone, "Your SEIP Registration has been successful.\nYour SEID Number is PB".$seip_id."\nPlease preserve this number for future reference.\n-PencilBox SEIP");
+            
+            
+            return response()->json([
+                "msg" => 'Your Registration Has been Successfull',
+                "seip_id" => 'Your SEIP ID-'.$seip_id
+            ]);
+        }
+	}
+
+    public function seip_student_phone_check(Request $request){
+        $phone_check = $request->phone;
+        $check_phone = DB::table('seipregistrations')->where('phone', $request->phone)->count();
+        if ($check_phone == 1) {
+            $phone_uniq = 'The phone number has been taken.';
+            return response()->json([
+                "errors" => $phone_uniq
+            ]);
+        } else {
+            if (strlen($phone_check) == 11) {
+                return response()->json([
+                    "success" => ''
+                ]);
+            } else {
+                $phone_digits = 'The phone number must be 11 digits.';
+                return response()->json([
+                    "errors" => $phone_digits
+                ]);
+            }
+
+        }
+    }
+    public function seip_student_national_id_check(Request $request){
+        $nid =  $request->national_id;
+        $check_national_id = DB::table('seipregistrations')->where('national_id', $request->national_id)->count();
+        if ($check_national_id == 1) {
+            $national_id_uniq = 'The national id has been taken.';
+            return response()->json([
+                "errors" => $national_id_uniq
+            ]);
+        } else {
+            if (strlen($nid) == 10 || strlen($nid) == 13 || strlen($nid) == 17) {
+                return response()->json([
+                    "success" => ''
+                ]);
+            } else {
+                $national_id_uniq = 'The national id must be between 10 ,13 and 17 digits.';
+                return response()->json([
+                    "errors" => $national_id_uniq
+                ]);
+            }
+        }
+    }
+  
+
+
+    
+}
